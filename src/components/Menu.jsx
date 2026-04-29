@@ -1,8 +1,8 @@
 // App.jsx
-import { useState } from "react";
-import Menu from "./components/Menu";
-import Cart from "./components/Cart";
-
+import React, { useState, useEffect } from 'react';
+import menuData from '../data/MenuData.json';
+import Cart from './Cart'; // Así se llama al carrito si están en la misma carpeta
+import { Clock, Star, Gift, ShoppingCart, MessageSquare } from 'lucide-react';
 const MESA_ID = "uuid-de-tu-mesa"; // vendrá de la URL o contexto
 
 export default function App() {
