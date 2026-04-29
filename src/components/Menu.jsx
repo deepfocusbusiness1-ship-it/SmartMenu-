@@ -6,8 +6,17 @@ const Menu = ({ onAddToCart }) => {
   const [horaActual, setHoraActual] = useState(new Date());
   const [categoriaActiva, setCategoriaActiva] = useState('desayunos');
 
+  // Lógica para detectar la mesa desde la URL (ej: ?mesa=5)
+  const [mesa, setMesa] = useState('S/N');
+
   useEffect(() => {
     const timer = setInterval(() => setHoraActual(new Date()), 60000);
+    
+    // Detectar mesa al cargar
+    const params = new URLSearchParams(window.location.search);
+    const mesaParam = params.get('mesa');
+    if (mesaParam) setMesa(mesaParam);
+
     return () => clearInterval(timer);
   }, []);
 
@@ -32,12 +41,7 @@ const Menu = ({ onAddToCart }) => {
 
       <header className="p-6">
         <h1 className="text-3xl font-black italic tracking-tighter">SMART MENU</h1>
-        // 1. Agregamos esto arriba, dentro de la función Menu:
-const params = new URLSearchParams(window.location.search);
-const mesa = params.get('mesa') || 'S/N'; // 'S/N' si no hay mesa en el link
-
-// 2. Y cambiamos el texto del header por este:
-<p className="text-slate-400 text-sm">Escaneado en Mesa #{mesa}</p>
+        <p className="text-slate-400 text-sm">Escaneado en Mesa #{mesa}</p>
       </header>
 
       {/* Chips de Categorías */}
@@ -104,10 +108,10 @@ const mesa = params.get('mesa') || 'S/N'; // 'S/N' si no hay mesa en el link
       {/* Carrito Flotante (UI solamente) */}
       <div className="fixed bottom-6 left-6 right-6 bg-white text-black h-16 rounded-2xl flex items-center justify-between px-6 shadow-2xl">
         <div className="flex items-center gap-3">
-          <div className="bg-black text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold">2</div>
+          <div className="bg-black text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold">0</div>
           <span className="font-bold">Ver pedido</span>
         </div>
-        <span className="font-black">$9.500</span>
+        <span className="font-black">$0</span>
       </div>
     </div>
   );
