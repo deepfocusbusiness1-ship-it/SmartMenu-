@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+// Aquí sigue el resto de tu código (formatARS, precioEfectivo, etc.)
 
 const formatARS = (n) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 const precioEfectivo = (item) => item.happy_hour ? item.precio * 0.5 : item.precio;
