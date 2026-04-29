@@ -1,14 +1,12 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import React, { useState } from 'react';
-import Menu from './components/Menu';
-import Cart from './components/Cart';
+import AdminPanel from "./components/AdminPanel";
+import Menu from "./components/Menu";
+import Cart from "./components/Cart";
 
 export default function App() {
   const [cartItems, setCartItems] = useState([]);
   const [showCart, setShowCart] = useState(false);
-
-  // Detectar mesa desde la URL para pasársela al carrito
-  const params = new URLSearchParams(window.location.search);
-  const MESA_ID = params.get('mesa') || 'S/N';
 
   const handleAdd = (producto) => {
     setCartItems((prev) => {
@@ -19,21 +17,33 @@ export default function App() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950">
-      <Menu onAddToCart={handleAdd} onOpenCart={() => setShowCart(true)} cartCount={cartItems.length} />
-      
-      {showCart && (
-        <Cart
-          items={cartItems}
-          mesaId={MESA_ID}
-          onClose={() => setShowCart(false)}
-          onSuccess={() => { 
-            setCartItems([]); 
-            setShowCart(false); 
-            alert("¡Pedido enviado con éxito!");
-          }}
-        />
-      )}
-    </main>
+    <BrowserRouter>
+      <Routes>
+        {/* RUTA PARA CLIENTES (EL MENÚ) */}
+        <Route path="/" element={
+          <main className="min-h-screen bg-slate-950">
+            <Menu 
+              onAddToCart={handleAdd} 
+              onOpenCart={() => setShowCart(true)} 
+              cartCount={cartItems.length} 
+            />
+            {showCart && (
+              <Cart
+                items={cartItems}
+                mesaId={new URLSearchParams(window.location.search).get('mesa') || 'S/N'}
+                onClose={() => setShowCart(false)}
+                onSuccess={() => { 
+                  setCartItems([]); 
+                  setShowCart(false); 
+                }}
+              />
+            )}
+          </main>
+        } />
+
+        {/* RUTA PARA EL BAR (LA COCINA) */}
+        <Route path="/cocina" element={<AdminPanel />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
