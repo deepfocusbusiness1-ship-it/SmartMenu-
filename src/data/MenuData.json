@@ -1,43 +1,14 @@
 {
   "categorias": [
-    {
-      "id": "desayunos",
-      "nombre": "Desayunos",
-      "descripcion": "Disponibles de 08:00 a 12:00"
-    },
-    {
-      "id": "bebidas",
-      "nombre": "Bebidas & Coctelería",
-      "descripcion": "Happy Hour 2x1 de 17:00 a 20:00"
-    }
+    { "id": "desayunos", "nombre": "Desayunos", "descripcion": "De 08:00 a 12:00" },
+    { "id": "bebidas", "nombre": "Bebidas & Coctelería", "descripcion": "Happy Hour 17:00 a 20:00" },
+    { "id": "comida", "nombre": "Para Picar", "descripcion": "Lo mejor de la casa" }
   ],
   "productos": [
-    {
-      "id": 1,
-      "nombre": "Café con Medialunas",
-      "precio": 3500,
-      "categoria": "desayunos",
-      "imagen": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=400",
-      "descripcion": "Café doble con 2 medialunas de manteca.",
-      "popular": true
-    },
-    {
-      "id": 2,
-      "nombre": "Fernet con Cola",
-      "precio": 5000,
-      "categoria": "bebidas",
-      "imagen": "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&q=80&w=400",
-      "descripcion": "Vaso de 750ml, Branca y Coca-Cola.",
-      "happy_hour": true
-    },
-    {
-      "id": 3,
-      "nombre": "Cerveza Artesanal IPA",
-      "precio": 4500,
-      "categoria": "bebidas",
-      "imagen": "https://images.unsplash.com/photo-1535958636474-b021ee887b13?auto=format&fit=crop&q=80&w=400",
-      "descripcion": "Pinta bien helada.",
-      "happy_hour": true
-    }
+    { "id": 1, "nombre": "Café con Medialunas", "precio": 3500, "categoria": "desayunos", "imagen": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?q=80&w=400", "descripcion": "Café doble + 2 medialunas.", "popular": true },
+    { "id": 2, "nombre": "Fernet con Cola", "precio": 5000, "categoria": "bebidas", "imagen": "https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=400", "descripcion": "Vaso de 750ml, Branca y Coca.", "happy_hour": true },
+    { "id": 3, "nombre": "Cerveza Artesanal IPA", "precio": 4500, "categoria": "bebidas", "imagen": "https://images.unsplash.com/photo-1535958636474-b021ee887b13?q=80&w=400", "descripcion": "Pinta bien helada.", "happy_hour": true },
+    { "id": 4, "nombre": "Hamburgesa Simple", "precio": 7500, "categoria": "comida", "imagen": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=400", "descripcion": "Carne, queso y pan brioche." },
+    { "id": 5, "nombre": "Papas Fritas Chicas", "precio": 3000, "categoria": "comida", "imagen": "https://images.unsplash.com/photo-1573088034027-5110b714d217?q=80&w=400", "descripcion": "Con dip de cheddar." }
   ]
 }
