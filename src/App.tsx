@@ -19,15 +19,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* RUTA PARA CLIENTES (EL MENÚ) */}
         <Route path="/" element={
           <main className="min-h-screen bg-slate-950">
-            <Menu 
-              onAddToCart={handleAdd} 
-              onOpenCart={() => setShowCart(true)} 
-              cartCount={cartItems.length} 
-            />
-            {showCart && (
+            {/* Si el carrito NO está abierto, mostramos el Menú normal */}
+            {!showCart ? (
+              <Menu 
+                onAddToCart={handleAdd} 
+                onOpenCart={() => setShowCart(true)} 
+                cartCount={cartItems.length} 
+              />
+            ) : (
+              /* Si el carrito ESTÁ abierto, mostramos solo el Carrito */
               <Cart
                 items={cartItems}
                 mesaId={new URLSearchParams(window.location.search).get('mesa') || 'S/N'}
@@ -35,15 +37,13 @@ export default function App() {
                 onSuccess={() => { 
                   setCartItems([]); 
                   setShowCart(false); 
+                  alert("¡Pedido enviado con éxito!");
                 }}
               />
             )}
           </main>
         } />
-
-        {/* RUTA PARA EL BAR (LA COCINA) */}
         <Route path="/cocina" element={<AdminPanel />} />
       </Routes>
     </BrowserRouter>
   );
-}
