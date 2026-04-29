@@ -1,147 +1,103 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "../lib/supabaseClient";   // ← instancia centralizada
+import { supabase } from "../lib/supabaseClient";
 import Login from "./Login";
 import menuData from "../data/MenuData.json";
 
 export default function AdminPanel() {
-  const [session, setSession] = useState(undefined); // undefined = cargando, null = sin sesión
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true); // Nuevo estado de carga más sólido
   const [pedidos, setPedidos] = useState([]);
 
-  // ── 1. Verificar sesión al montar y escuchar cambios ──────────────────
   useEffect(() => {
-    // Leer sesión actual (evita parpadeo en F5)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+    // 1. Verificamos sesión apenas arranca
+    const initSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+      setLoading(false);
+    };
+    initSession();
 
-    // Escuchar login / logout en tiempo real
+    // 2. Escuchamos cambios (Login/Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 2. Pedidos (solo se activa si hay sesión) ─────────────────────────
   const fetchPedidos = useCallback(async () => {
+    if (!session) return;
     const { data, error } = await supabase
       .from("pedidos")
-      .select("id, cantidad, precio_unitario, estado, created_at, nombre_cliente, mesa_id, producto_id")
+      .select("*")
       .not("estado", "eq", "listo")
       .order("created_at", { ascending: true });
 
     if (!error) setPedidos(data || []);
-  }, []);
+  }, [session]);
 
   useEffect(() => {
-    if (!session) return; // no suscribirse si no hay sesión
-
-    fetchPedidos();
-
-    const channel = supabase
-      .channel("cocina-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, fetchPedidos)
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
+    if (session) {
+      fetchPedidos();
+      const channel = supabase.channel("realtime-pedidos")
+        .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, fetchPedidos)
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
   }, [session, fetchPedidos]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    // onAuthStateChange detecta el logout y setea session = null automáticamente
+  const getNombreProducto = (producto_id: any) => {
+    const lista = menuData.productos || [];
+    const p = lista.find((item: any) => String(item.id) === String(producto_id));
+    return p ? p.nombre : `Producto #${producto_id}`;
   };
 
-  const actualizarEstado = async (id, nuevoEstado) => {
-    await supabase.from("pedidos").update({ estado: nuevoEstado }).eq("id", id);
-    // El canal realtime dispara fetchPedidos, no hace falta actualizar local
-  };
+  const handleLogout = () => supabase.auth.signOut();
 
-  // ── 3. Renders condicionales ──────────────────────────────────────────
-
-  // Estado de carga inicial (evita mostrar Login por un frame antes de verificar)
-  if (session === undefined) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  // --- RENDERIZADO SEGURO ---
+  if (loading) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono">Verificando credenciales...</div>;
   }
 
-  // Sin sesión → mostrar Login
-  if (!session) return <Login />;
-
-  // ── 4. Panel principal ────────────────────────────────────────────────
-  const getNombreProducto = (producto_id) => {
-  // Buscamos directamente en el array de productos de tu JSON
-  const producto = menuData.productos?.find((p) => String(p.id) === String(producto_id));
-  return producto ? producto.nombre : `Producto #${producto_id}`;
-};
+  if (!session) {
+    return <Login />;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4">
-
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
-        <div>
-          <h1 className="text-xl font-bold text-white">🍳 Panel de Cocina</h1>
-          <p className="text-slate-500 text-sm">{pedidos.length} pedidos activos</p>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="text-slate-400 hover:text-red-400 text-sm flex items-center gap-1.5 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Cerrar sesión
-        </button>
+    <div className="min-h-screen bg-slate-950 p-6 text-white font-sans">
+      <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
+        <h1 className="text-2xl font-black uppercase tracking-tighter text-orange-500">Cocina Pro 🍳</h1>
+        <button onClick={handleLogout} className="text-xs bg-red-500/10 text-red-400 px-3 py-1 rounded-lg border border-red-500/20">Salir</button>
       </div>
 
-      {/* Grid de pedidos */}
-      {pedidos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-slate-600">
-          <span className="text-5xl mb-3">✅</span>
-          <p className="text-lg font-medium">Todo al día</p>
-          <p className="text-sm">No hay pedidos pendientes</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {pedidos.map((pedido) => (
-            <div key={pedido.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-white">{getNombreProducto(pedido.producto_id)}</p>
-                  <p className="text-slate-400 text-sm">
-                    Mesa {pedido.mesa_id} · {pedido.nombre_cliente}
-                  </p>
-                </div>
-                <span className="text-lg font-bold text-slate-300">×{pedido.cantidad}</span>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {pedidos.length === 0 ? (
+          <p className="text-slate-500 italic col-span-full text-center py-10">Esperando nuevas comandas...</p>
+        ) : (
+          pedidos.map((p: any) => (
+            <div key={p.id} className="p-5 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl">
+              <div className="flex justify-between items-start mb-3">
+                <span className="text-3xl font-black text-white">Mesa {p.mesa_id}</span>
+                <span className="bg-orange-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase">{p.estado}</span>
               </div>
-
-              {/* Estado */}
-              <div className="flex gap-2">
-                {["pendiente", "cocina", "listo"].map((estado) => (
-                  <button
-                    key={estado}
-                    onClick={() => actualizarEstado(pedido.id, estado)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium capitalize transition-all
-                      ${pedido.estado === estado
-                        ? "bg-orange-500 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                      }`}
-                  >
-                    {estado}
-                  </button>
-                ))}
-              </div>
-
+              <p className="text-orange-400 font-bold text-lg leading-tight mb-1">{getNombreProducto(p.producto_id)}</p>
+              <p className="text-slate-400 text-sm mb-4">Cant: <span className="text-white font-bold">{p.cantidad}</span> · {p.nombre_cliente}</p>
+              
+              <button 
+                onClick={async () => {
+                  const proximo = p.estado === 'pendiente' ? 'cocina' : 'listo';
+                  await supabase.from("pedidos").update({ estado: proximo }).eq("id", p.id);
+                  fetchPedidos();
+                }}
+                className="w-full py-3 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-500 transition-colors"
+              >
+                {p.estado === 'pendiente' ? 'Tomar Comanda' : 'Marcar como Entregado'}
+              </button>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }
