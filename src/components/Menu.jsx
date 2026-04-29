@@ -32,7 +32,12 @@ const Menu = ({ onAddToCart }) => {
 
       <header className="p-6">
         <h1 className="text-3xl font-black italic tracking-tighter">SMART MENU</h1>
-        <p className="text-slate-400 text-sm">Escaneado en Mesa #5</p>
+        // 1. Agregamos esto arriba, dentro de la función Menu:
+const params = new URLSearchParams(window.location.search);
+const mesa = params.get('mesa') || 'S/N'; // 'S/N' si no hay mesa en el link
+
+// 2. Y cambiamos el texto del header por este:
+<p className="text-slate-400 text-sm">Escaneado en Mesa #{mesa}</p>
       </header>
 
       {/* Chips de Categorías */}
