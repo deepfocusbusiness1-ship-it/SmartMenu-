@@ -1,18 +1,23 @@
 import { useState, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-// Aquí sigue el resto de tu código (formatARS, precioEfectivo, etc.)
+// Funciones auxiliares de formato y cálculo
+const formatARS = (n) => new Intl.NumberFormat("es-AR", { 
+  style: "currency", 
+  currency: "ARS", 
+  maximumFractionDigits: 0 
+}).format(n);
 
-const formatARS = (n) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 const precioEfectivo = (item) => item.happy_hour ? item.precio * 0.5 : item.precio;
 
 export default function Cart({ items = [], mesaId, onClose, onSuccess }) {
-  const [step, setStep] = useState("cart");
   const [nombre, setNombre] = useState("");
+  const [mesaManual, setMesaManual] = useState(mesaId !== 'S/N' ? mesaId : ""); // Toma la mesa del QR o inicia vacío
   const [propinaSel, setPropinaSel] = useState(10); // 10% por defecto
   const [propinaManual, setPropinaManual] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Cálculos de totales
   const subtotal = useMemo(() => items.reduce((acc, i) => acc + precioEfectivo(i) * i.cantidad, 0), [items]);
   
   const montoPropina = useMemo(() => {
@@ -24,89 +29,123 @@ export default function Cart({ items = [], mesaId, onClose, onSuccess }) {
 
   const confirmarPedido = async () => {
     if (!nombre.trim()) return alert("Por favor, ingresá tu nombre");
-    setLoading(true);
+    if (!mesaManual.trim()) return alert("Por favor, ingresá el número de mesa");
 
+    setLoading(true);
     try {
       const filasPedidos = items.map((item) => ({
-        mesa_id: mesaId.toString(), // Enviamos como texto puro
-        producto_id: item.id,
+        mesa_id: mesaManual.toString(), // Usamos el valor del estado mesaManual
+        producto_id: item.id.toString(),
         cantidad: item.cantidad,
         precio_unitario: precioEfectivo(item),
         estado: "pendiente",
-        nombre_cliente: nombre.trim() // Lo guardamos directo en el pedido
+        nombre_cliente: nombre.trim()
       }));
 
       const { error } = await supabase.from("pedidos").insert(filasPedidos);
       if (error) throw error;
       onSuccess();
     } catch (err) {
-      alert("Error: " + err.message);
+      alert("Error al enviar pedido: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end">
-      <div className="w-full bg-slate-900 rounded-t-3xl p-6 text-white max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between mb-6">
-          <h2 className="text-xl font-bold">Resumen de Pedido</h2>
-          <button onClick={onClose} className="text-slate-400">Cerrar</button>
+    <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col text-white font-sans">
+      {/* Header del Carrito */}
+      <div className="p-6 border-b border-white/10 flex justify-between items-center bg-slate-900/50 backdrop-blur-xl">
+        <div>
+          <h2 className="text-2xl font-black uppercase tracking-tighter">Tu Pedido</h2>
+          <p className="text-xs text-slate-500 uppercase tracking-widest">Revisá antes de enviar</p>
+        </div>
+        <button onClick={onClose} className="bg-white/10 px-4 py-2 rounded-xl text-xs font-bold uppercase">Cerrar</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6">
+        {/* Lista de Productos */}
+        <div className="space-y-3 mb-8">
+          {items.map(item => (
+            <div key={item.id} className="flex justify-between items-center p-4 bg-white/5 rounded-2xl border border-white/5">
+              <div>
+                <p className="font-bold text-white">{item.cantidad}x {item.nombre}</p>
+                {item.happy_hour && <p className="text-[10px] text-orange-400 font-bold uppercase">Happy Hour 50% OFF</p>}
+              </div>
+              <span className="font-mono text-sm text-slate-400">{formatARS(precioEfectivo(item) * item.cantidad)}</span>
+            </div>
+          ))}
         </div>
 
-        {items.map(item => (
-          <div key={item.id} className="flex justify-between mb-2 text-sm border-b border-white/5 pb-2">
-            <span>{item.cantidad}x {item.nombre}</span>
-            <span>{formatARS(precioEfectivo(item) * item.cantidad)}</span>
-          </div>
-        ))}
-
         {/* SECCIÓN DE PROPINA */}
-        <div className="mt-6 p-4 bg-white/5 rounded-2xl">
-          <p className="text-xs uppercase text-slate-400 mb-3 tracking-widest">¿Querés dejar propina?</p>
-          <div className="grid grid-cols-4 gap-2 mb-3">
+        <div className="p-5 bg-orange-500/5 border border-orange-500/10 rounded-3xl mb-8">
+          <p className="text-[10px] uppercase text-orange-500 font-black mb-3 tracking-widest text-center">¿Querés dejar propina para el mozo?</p>
+          <div className="grid grid-cols-4 gap-2 mb-4">
             {[0, 10, 15, "manual"].map(val => (
               <button 
                 key={val}
                 onClick={() => setPropinaSel(val)}
-                className={`py-2 rounded-lg text-sm font-bold transition-all ${propinaSel === val ? 'bg-amber-500 text-black' : 'bg-white/10'}`}
+                className={`py-3 rounded-xl text-xs font-black transition-all ${propinaSel === val ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-400'}`}
               >
-                {val === "manual" ? "Otro" : val === 0 ? "No" : val + "%"}
+                {val === "manual" ? "OTRO" : val === 0 ? "NO" : val + "%"}
               </button>
             ))}
           </div>
           {propinaSel === "manual" && (
             <input 
               type="number" 
-              placeholder="Monto de propina"
-              className="w-full bg-black/40 p-3 rounded-xl mb-3 outline-none border border-amber-500/50"
+              placeholder="Monto en pesos"
+              className="w-full bg-black/40 p-4 rounded-2xl mb-4 outline-none border border-orange-500/30 text-center font-bold"
               onChange={(e) => setPropinaManual(e.target.value)}
             />
           )}
-          <div className="flex justify-between text-amber-400 font-bold">
-            <span>Propina:</span>
-            <span>{formatARS(montoPropina)}</span>
+          <div className="flex justify-between items-center px-2">
+            <span className="text-xs font-bold text-slate-500 uppercase">Propina sugerida:</span>
+            <span className="text-lg font-black text-orange-400">{formatARS(montoPropina)}</span>
           </div>
         </div>
 
-        <div className="mt-6 space-y-4">
-          <input 
-            type="text" 
-            placeholder="Tu nombre" 
-            className="w-full bg-white/10 p-4 rounded-xl outline-none"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-          />
-          <div className="flex justify-between items-center py-2">
-            <span className="text-slate-400">Total a pagar:</span>
-            <span className="text-3xl font-black">{formatARS(totalFinal)}</span>
+        {/* DATOS DEL CLIENTE (DISEÑO PRO) */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            {/* Campo Mesa */}
+            <div className="col-span-1">
+              <label className="text-[10px] uppercase text-slate-500 ml-2 mb-1 block">Mesa</label>
+              <input 
+                type="text" 
+                placeholder="N°" 
+                disabled={mesaId !== 'S/N'}
+                className="w-full bg-white/5 p-4 rounded-2xl outline-none text-center font-black text-xl text-orange-500 border border-white/5 focus:border-orange-500/50 disabled:opacity-50"
+                value={mesaManual}
+                onChange={(e) => setMesaManual(e.target.value)}
+              />
+            </div>
+            {/* Campo Nombre */}
+            <div className="col-span-2">
+              <label className="text-[10px] uppercase text-slate-500 ml-2 mb-1 block">Tu Nombre</label>
+              <input 
+                type="text" 
+                placeholder="Ej: Ezequiel" 
+                className="w-full bg-white/5 p-4 rounded-2xl outline-none font-bold border border-white/5 focus:border-orange-500/50"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+              />
+            </div>
           </div>
+
+          <div className="pt-4 border-t border-white/5">
+            <div className="flex justify-between items-end">
+              <span className="text-slate-500 text-xs font-bold uppercase mb-1">Total Final</span>
+              <span className="text-4xl font-black text-white tracking-tighter">{formatARS(totalFinal)}</span>
+            </div>
+          </div>
+
           <button 
             onClick={confirmarPedido}
-            disabled={loading}
-            className="w-full bg-white text-black py-5 rounded-2xl font-black text-lg uppercase tracking-tighter"
+            disabled={loading || items.length === 0}
+            className="w-full bg-orange-500 hover:bg-orange-400 disabled:bg-slate-800 text-white py-5 rounded-3xl font-black text-lg uppercase tracking-widest shadow-2xl shadow-orange-500/20 active:scale-95 transition-all mt-4"
           >
-            {loading ? "Enviando..." : "Realizar Pedido 🚀"}
+            {loading ? "Procesando..." : "Enviar Pedido 🚀"}
           </button>
         </div>
       </div>
