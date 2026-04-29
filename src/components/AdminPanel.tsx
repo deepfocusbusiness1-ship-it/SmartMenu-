@@ -72,12 +72,10 @@ export default function AdminPanel() {
 
   // ── 4. Panel principal ────────────────────────────────────────────────
   const getNombreProducto = (producto_id) => {
-    for (const categoria of Object.values(menuData)) {
-      const item = categoria.find((p) => String(p.id) === String(producto_id));
-      if (item) return item.nombre;
-    }
-    return `Producto #${producto_id}`;
-  };
+  // Buscamos directamente en el array de productos de tu JSON
+  const producto = menuData.productos?.find((p) => String(p.id) === String(producto_id));
+  return producto ? producto.nombre : `Producto #${producto_id}`;
+};
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4">
