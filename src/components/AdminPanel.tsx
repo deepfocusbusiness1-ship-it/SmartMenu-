@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Login from "./Login";
-import menuData from "../data/MenuData.json";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// ─── Tipos Actualizados ──────────────────────────────────────────────────────
 interface Pedido {
   id: string;
   mesa_id: string;
@@ -12,22 +11,18 @@ interface Pedido {
   estado: "pendiente" | "cocina" | "listo";
   nombre_cliente: string;
   created_at: string;
+  // Agregamos la relación con productos que viene de la DB
+  productos?: {
+    nombre: string;
+  };
 }
-
-// ─── Helper: nombre de producto ───────────────────────────────────────────────
-// Lee desde menuData.productos tal como fue corregido.
-const getNombreProducto = (producto_id: string | number): string => {
-  const lista = menuData.productos || [];
-  const p = lista.find((item: any) => String(item.id) === String(producto_id));
-  return p ? p.nombre : `Producto #${producto_id}`;
-};
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function AdminPanel() {
-  const [session, setSession]   = useState<any>(null);
-  const [loading, setLoading]   = useState(true);
-  const [pedidos, setPedidos]   = useState<Pedido[]>([]);
-  const channelRef              = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // ── Autenticación ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -46,41 +41,66 @@ export default function AdminPanel() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Fetch inicial (solo al montar con sesión activa) ───────────────────────
+  // ── Fetch inicial con JOIN de productos ───────────────────────────────────
   const fetchPedidosInicial = useCallback(async () => {
     const { data, error } = await supabase
       .from("pedidos")
-      .select("*")
+      .select(`
+        *,
+        productos (
+          nombre
+        )
+      `)
       .not("estado", "eq", "listo")
       .order("created_at", { ascending: true });
 
-    if (!error) setPedidos(data as Pedido[] ?? []);
+    if (!error) setPedidos(data as unknown as Pedido[] ?? []);
   }, []);
 
   // ── Handlers quirúrgicos ───────────────────────────────────────────────────
 
-  // INSERT → agrega el pedido al final del estado local, respetando el orden por created_at.
-  const handleInsert = useCallback((nuevoPedido: Pedido) => {
-    // Ignorar si ya existe (deduplicación defensiva)
+  const handleInsert = useCallback(async (nuevoPedido: Pedido) => {
+    // Como el Realtime no trae el JOIN automáticamente, hacemos un fetch rápido del nombre
+    const { data: prodData } = await supabase
+      .from("productos")
+      .select("nombre")
+      .eq("id", nuevoPedido.producto_id)
+      .single();
+
+    const pedidoConNombre = {
+      ...nuevoPedido,
+      productos: prodData ? { nombre: prodData.nombre } : undefined
+    };
+
     setPedidos((prev) => {
       if (prev.some((p) => p.id === nuevoPedido.id)) return prev;
-      return [...prev, nuevoPedido].sort(
+      return [...prev, pedidoConNombre].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     });
   }, []);
 
-  // UPDATE → actualiza el pedido modificado en el estado local.
-  // Si el nuevo estado es 'listo', lo elimina de la vista.
-  const handleUpdate = useCallback((pedidoActualizado: Pedido) => {
-    setPedidos((prev) => {
-      if (pedidoActualizado.estado === "listo") {
-        // Salió del flujo de cocina → remover de la vista
-        return prev.filter((p) => p.id !== pedidoActualizado.id);
-      }
-      // Reemplazar solo el pedido modificado, sin tocar el resto
-      return prev.map((p) => p.id === pedidoActualizado.id ? pedidoActualizado : p);
-    });
+  const handleUpdate = useCallback(async (pedidoActualizado: Pedido) => {
+    if (pedidoActualizado.estado === "listo") {
+      setPedidos((prev) => prev.filter((p) => p.id !== pedidoActualizado.id));
+      return;
+    }
+
+    // Buscamos el nombre si no lo tenemos (para mantener la consistencia)
+    const { data: prodData } = await supabase
+      .from("productos")
+      .select("nombre")
+      .eq("id", pedidoActualizado.producto_id)
+      .single();
+
+    const pedidoConNombre = {
+      ...pedidoActualizado,
+      productos: prodData ? { nombre: prodData.nombre } : undefined
+    };
+
+    setPedidos((prev) => 
+      prev.map((p) => p.id === pedidoActualizado.id ? pedidoConNombre : p)
+    );
   }, []);
 
   // ── Suscripción Realtime ───────────────────────────────────────────────────
@@ -108,18 +128,13 @@ export default function AdminPanel() {
     };
   }, [session, fetchPedidosInicial, handleInsert, handleUpdate]);
 
-  // ── Acción: avanzar estado desde el botón ─────────────────────────────────
-  // El UPDATE de Supabase dispara el canal → handleUpdate se encarga del estado local.
-  // No hace falta llamar a fetchPedidos manualmente.
   const avanzarEstado = async (pedido: Pedido) => {
     const proximo = pedido.estado === "pendiente" ? "cocina" : "listo";
     await supabase.from("pedidos").update({ estado: proximo }).eq("id", pedido.id);
-    // handleUpdate reacciona al evento UPDATE vía canal — sin fetch adicional.
   };
 
   const handleLogout = () => supabase.auth.signOut();
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono">
@@ -132,7 +147,6 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 text-white font-sans">
-      {/* Header */}
       <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
         <h1 className="text-2xl font-black uppercase tracking-tighter text-orange-500">
           Cocina Pro 🍳
@@ -145,7 +159,6 @@ export default function AdminPanel() {
         </button>
       </div>
 
-      {/* Grid de pedidos */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {pedidos.length === 0 ? (
           <p className="text-slate-500 italic col-span-full text-center py-10">
@@ -155,23 +168,26 @@ export default function AdminPanel() {
           pedidos.map((p) => (
             <div
               key={p.id}
-              className="p-5 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl"
+              className="p-5 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl transition-all"
             >
               <div className="flex justify-between items-start mb-3">
                 <span className="text-3xl font-black text-white">Mesa {p.mesa_id}</span>
-                <span className="bg-orange-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
+                  p.estado === 'pendiente' ? 'bg-amber-500 text-black' : 'bg-blue-500 text-white'
+                }`}>
                   {p.estado}
                 </span>
               </div>
 
+              {/* Ahora leemos el nombre directamente de la relación con la tabla productos */}
               <p className="text-orange-400 font-bold text-lg leading-tight mb-1">
-                {getNombreProducto(p.producto_id)}
+                {p.productos?.nombre || `Cargando producto...`}
               </p>
 
               <p className="text-slate-400 text-sm mb-4">
                 Cant: <span className="text-white font-bold">{p.cantidad}</span>
                 {" · "}
-                {p.nombre_cliente}
+                <span className="italic">{p.nombre_cliente}</span>
               </p>
 
               <button
