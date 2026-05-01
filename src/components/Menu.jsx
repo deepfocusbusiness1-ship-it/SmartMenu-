@@ -1,84 +1,144 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from "../lib/supabaseClient"; // <-- Nueva línea agregada
-import menuData from '../data/MenuData.json';
-import { ShoppingCart, Gift } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
+import Cart from "./Cart";
 
-const Menu = ({ onAddToCart, onOpenCart, cartCount }) => {
-  const [categoriaActiva, setCategoriaActiva] = useState('desayunos');
-  const [mesa, setMesa] = useState('S/N');
+// Las categorías las dejamos fijas aquí por ahora
+const CATEGORIAS = ["todos", "desayunos", "bebidas", "comida"];
 
+export default function Menu({ mesaId = "S/N" }) {
+  const [productos, setProductos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [categoriaSel, setCategoriaSel] = useState("todos");
+  const [carrito, setCarrito] = useState([]);
+  const [showCart, setShowCart] = useState(false);
+
+  // 1. Cargar productos desde Supabase
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const mesaParam = params.get('mesa');
-    if (mesaParam) setMesa(mesaParam);
+    const fetchProductos = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("productos")
+        .select("*")
+        .eq("disponible", true); // Solo mostramos lo que hay en stock
+
+      if (!error) {
+        setProductos(data || []);
+      } else {
+        console.error("Error cargando menú:", error.message);
+      }
+      setLoading(false);
+    };
+
+    fetchProductos();
   }, []);
 
-  return (
-    <div className="min-h-screen text-white pb-24">
-      {/* Banner Cumpleaños */}
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-4 text-center">
-        <button className="flex items-center justify-center gap-2 w-full font-bold">
-          <Gift size={20} /> ¡ES MI CUMPLEAÑOS!
-        </button>
-      </div>
+  // 2. Lógica del Carrito
+  const agregarAlCarrito = (producto) => {
+    setCarrito((prev) => {
+      const existe = prev.find((item) => item.id === producto.id);
+      if (existe) {
+        return prev.map((item) =>
+          item.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
+        );
+      }
+      return [...prev, { ...producto, cantidad: 1 }];
+    });
+  };
 
-      <header className="p-6">
-        <h1 className="text-3xl font-black italic tracking-tighter">SMART MENU</h1>
-        <p className="text-slate-400 text-sm">Escaneado en Mesa #{mesa}</p>
+  const totalItems = carrito.reduce((acc, item) => acc + item.cantidad, 0);
+
+  // 3. Filtrado por categoría
+  const productosFiltrados = categoriaSel === "todos" 
+    ? productos 
+    : productos.filter(p => p.categoria === categoriaSel);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono">
+        Cargando delicias...
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white font-sans pb-24">
+      {/* Header Estilo Bar */}
+      <header className="p-6 pt-12">
+        <h1 className="text-4xl font-black uppercase tracking-tighter">SmartMenu</h1>
+        <p className="text-orange-500 font-bold uppercase text-xs tracking-widest">Mesa {mesaId}</p>
       </header>
 
-      {/* Categorías */}
+      {/* Selector de Categorías */}
       <div className="flex gap-2 overflow-x-auto px-6 mb-8 no-scrollbar">
-        {menuData.categorias.map(cat => (
+        {CATEGORIAS.map(cat => (
           <button
-            key={cat.id}
-            onClick={() => setCategoriaActiva(cat.id)}
-            className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium ${
-              categoriaActiva === cat.id ? 'bg-white text-black' : 'bg-slate-900 text-slate-400'
+            key={cat}
+            onClick={() => setCategoriaSel(cat)}
+            className={`px-6 py-2 rounded-full text-xs font-black uppercase transition-all whitespace-nowrap ${
+              categoriaSel === cat ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-500'
             }`}
           >
-            {cat.nombre}
+            {cat}
           </button>
         ))}
       </div>
 
-      {/* Productos */}
+      {/* Grid de Productos */}
       <div className="grid gap-6 px-6">
-        {menuData.productos
-          .filter(p => p.categoria === categoriaActiva)
-          .map(producto => (
-            <div key={producto.id} className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 flex">
-              <img src={producto.imagen} alt={producto.nombre} className="w-24 h-24 object-cover" />
-              <div className="p-4 flex-1 flex flex-col justify-between">
-                <h3 className="font-bold">{producto.nombre}</h3>
-                <div className="flex justify-between items-end">
-                  <p className="font-bold text-green-400">${producto.precio}</p>
-                  <button 
-                    onClick={() => onAddToCart(producto)}
-                    className="bg-white text-black p-2 rounded-lg"
-                  >
-                    <ShoppingCart size={18} />
-                  </button>
-                </div>
-              </div>
+        {productosFiltrados.map(p => (
+          <div key={p.id} className="bg-white/5 rounded-3xl overflow-hidden border border-white/5 flex flex-col">
+            <div className="h-48 overflow-hidden relative">
+              <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
+              {p.popular && (
+                <span className="absolute top-4 left-4 bg-amber-500 text-black text-[10px] font-black px-2 py-1 rounded-lg uppercase">
+                  ⭐ Popular
+                </span>
+              )}
             </div>
-          ))}
+            <div className="p-5 flex-1 flex flex-col">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold text-xl leading-tight">{p.nombre}</h3>
+                <span className="text-orange-500 font-black">${p.precio}</span>
+              </div>
+              <p className="text-slate-500 text-sm mb-6 flex-1">{p.descripcion}</p>
+              <button
+                onClick={() => agregarAlCarrito(p)}
+                className="w-full bg-white text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
+              >
+                Agregar al pedido +
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Botón Flotante para abrir el Carrito */}
-      <button 
-        onClick={onOpenCart}
-        className="fixed bottom-6 left-6 right-6 bg-white text-black h-16 rounded-2xl flex items-center justify-between px-6 shadow-2xl z-50"
-      >
-        <div className="flex items-center gap-3">
-          <div className="bg-black text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold">
-            {cartCount}
-          </div>
-          <span className="font-bold">Ver mi pedido</span>
-        </div>
-      </button>
+      {/* Botón Flotante del Carrito (Solo aparece si hay items) */}
+      {totalItems > 0 && (
+        <button
+          onClick={() => setShowCart(true)}
+          className="fixed bottom-8 left-6 right-6 bg-orange-500 py-5 rounded-3xl shadow-2xl shadow-orange-500/40 flex justify-between px-8 items-center animate-bounce-subtle"
+        >
+          <span className="bg-black text-white w-8 h-8 flex items-center justify-center rounded-full font-black text-sm">
+            {totalItems}
+          </span>
+          <span className="font-black uppercase tracking-widest text-sm">Ver mi pedido</span>
+          <span className="font-black text-lg">🚀</span>
+        </button>
+      )}
+
+      {/* Modal del Carrito */}
+      {showCart && (
+        <Cart 
+          items={carrito} 
+          mesaId={mesaId} 
+          onClose={() => setShowCart(false)} 
+          onSuccess={() => {
+            setCarrito([]);
+            setShowCart(false);
+            alert("¡Pedido enviado con éxito! 🥂");
+          }}
+        />
+      )}
     </div>
   );
-};
-
-export default Menu;
+}
