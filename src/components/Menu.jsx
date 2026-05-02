@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Cart from "./Cart";
+import CierreMesa from "./CierreMesa"; // Importamos el nuevo componente
 
-// Las categorías las dejamos fijas aquí por ahora
 const CATEGORIAS = ["todos", "desayunos", "bebidas", "comida"];
 
 export default function Menu({ mesaId = "S/N" }) {
@@ -11,15 +11,16 @@ export default function Menu({ mesaId = "S/N" }) {
   const [categoriaSel, setCategoriaSel] = useState("todos");
   const [carrito, setCarrito] = useState([]);
   const [showCart, setShowCart] = useState(false);
+  const [showCierre, setShowCierre] = useState(false); // Estado para el modal de cuenta
 
-  // 1. Cargar productos desde Supabase
+  // 1. Carga de productos desde Supabase
   useEffect(() => {
     const fetchProductos = async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("productos")
         .select("*")
-        .eq("disponible", true); // Solo mostramos lo que hay en stock
+        .eq("disponible", true);
 
       if (!error) {
         setProductos(data || []);
@@ -47,25 +48,36 @@ export default function Menu({ mesaId = "S/N" }) {
 
   const totalItems = carrito.reduce((acc, item) => acc + item.cantidad, 0);
 
-  // 3. Filtrado por categoría
+  // 3. Filtrado
   const productosFiltrados = categoriaSel === "todos" 
     ? productos 
     : productos.filter(p => p.categoria === categoriaSel);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono">
-        Cargando delicias...
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono uppercase text-xs tracking-widest">
+        Preparando el servicio...
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans pb-24">
-      {/* Header Estilo Bar */}
-      <header className="p-6 pt-12">
-        <h1 className="text-4xl font-black uppercase tracking-tighter">SmartMenu</h1>
-        <p className="text-orange-500 font-bold uppercase text-xs tracking-widest">Mesa {mesaId}</p>
+      
+      {/* Header con botón de cuenta */}
+      <header className="p-6 pt-12 flex justify-between items-start">
+        <div>
+          <h1 className="text-4xl font-black uppercase tracking-tighter">SmartMenu</h1>
+          <p className="text-orange-500 font-bold uppercase text-[10px] tracking-widest">Mesa {mesaId}</p>
+        </div>
+        
+        {/* Botón para pedir la cuenta (Toque Argentino) */}
+        <button 
+          onClick={() => setShowCierre(true)}
+          className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+        >
+          Pedir Cuenta 🔔
+        </button>
       </header>
 
       {/* Selector de Categorías */}
@@ -74,7 +86,7 @@ export default function Menu({ mesaId = "S/N" }) {
           <button
             key={cat}
             onClick={() => setCategoriaSel(cat)}
-            className={`px-6 py-2 rounded-full text-xs font-black uppercase transition-all whitespace-nowrap ${
+            className={`px-6 py-2 rounded-full text-[10px] font-black uppercase transition-all whitespace-nowrap ${
               categoriaSel === cat ? 'bg-orange-500 text-white' : 'bg-white/5 text-slate-500'
             }`}
           >
@@ -86,47 +98,47 @@ export default function Menu({ mesaId = "S/N" }) {
       {/* Grid de Productos */}
       <div className="grid gap-6 px-6">
         {productosFiltrados.map(p => (
-          <div key={p.id} className="bg-white/5 rounded-3xl overflow-hidden border border-white/5 flex flex-col">
+          <div key={p.id} className="bg-white/5 rounded-[2.5rem] overflow-hidden border border-white/5 flex flex-col">
             <div className="h-48 overflow-hidden relative">
               <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
               {p.popular && (
-                <span className="absolute top-4 left-4 bg-amber-500 text-black text-[10px] font-black px-2 py-1 rounded-lg uppercase">
-                  ⭐ Popular
+                <span className="absolute top-4 left-4 bg-amber-500 text-black text-[10px] font-black px-3 py-1 rounded-full uppercase">
+                  ⭐ Recomendado
                 </span>
               )}
             </div>
-            <div className="p-5 flex-1 flex flex-col">
+            <div className="p-6 flex-1 flex flex-col">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="font-bold text-xl leading-tight">{p.nombre}</h3>
-                <span className="text-orange-500 font-black">${p.precio}</span>
+                <span className="text-orange-500 font-black text-lg">${p.precio}</span>
               </div>
-              <p className="text-slate-500 text-sm mb-6 flex-1">{p.descripcion}</p>
+              <p className="text-slate-500 text-xs mb-6 flex-1 italic">{p.descripcion}</p>
               <button
                 onClick={() => agregarAlCarrito(p)}
-                className="w-full bg-white text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
+                className="w-full bg-white text-black py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg"
               >
-                Agregar al pedido +
+                Sumar al pedido +
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Botón Flotante del Carrito (Solo aparece si hay items) */}
+      {/* Botón Flotante del Carrito */}
       {totalItems > 0 && (
         <button
           onClick={() => setShowCart(true)}
-          className="fixed bottom-8 left-6 right-6 bg-orange-500 py-5 rounded-3xl shadow-2xl shadow-orange-500/40 flex justify-between px-8 items-center animate-bounce-subtle"
+          className="fixed bottom-8 left-6 right-6 bg-orange-500 py-5 rounded-[2rem] shadow-2xl shadow-orange-500/40 flex justify-between px-8 items-center animate-bounce-subtle"
         >
           <span className="bg-black text-white w-8 h-8 flex items-center justify-center rounded-full font-black text-sm">
             {totalItems}
           </span>
-          <span className="font-black uppercase tracking-widest text-sm">Ver mi pedido</span>
-          <span className="font-black text-lg">🚀</span>
+          <span className="font-black uppercase tracking-widest text-xs">Revisar Pedido</span>
+          <span className="font-black text-lg">🛒</span>
         </button>
       )}
 
-      {/* Modal del Carrito */}
+      {/* Modales */}
       {showCart && (
         <Cart 
           items={carrito} 
@@ -135,7 +147,18 @@ export default function Menu({ mesaId = "S/N" }) {
           onSuccess={() => {
             setCarrito([]);
             setShowCart(false);
-            alert("¡Pedido enviado con éxito! 🥂");
+            alert("¡Pedido enviado a cocina! 🥂");
+          }}
+        />
+      )}
+
+      {showCierre && (
+        <CierreMesa 
+          mesaId={mesaId} 
+          onClose={() => setShowCierre(false)} 
+          onSuccess={() => {
+            setShowCierre(false);
+            alert("¡El mozo ya recibió tu pedido de cuenta! 🥂");
           }}
         />
       )}
