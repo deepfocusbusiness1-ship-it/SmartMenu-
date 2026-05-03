@@ -1,210 +1,151 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Login from "./Login";
+import { Plus, Coffee, Utensils, IceCream, Beer } from "lucide-react";
 
 // --- Tipos ---
 interface Pedido {
   id: string;
   mesa_id: string;
-  producto_id: string | number;
+  producto_id: string;
   cantidad: number;
   estado: "pendiente" | "cocina" | "entregado";
   nombre_cliente: string;
-  created_at: string;
   pide_cuenta: boolean;
   productos?: {
     nombre: string;
+    categoria: string;
   };
 }
-
-// Función para el sonido de notificación
-const playBell = () => {
-  const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-  audio.play().catch(() => console.log("Audio bloqueado por el navegador."));
-};
 
 export default function AdminPanel() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // --- Gestión de Sesión ---
   useEffect(() => {
-    const getInitialSession = async () => {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      setSession(currentSession);
+    const getSession = async () => {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      setSession(s);
       setLoading(false);
     };
-
-    getInitialSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    getSession();
   }, []);
 
-  // --- Carga de Pedidos ---
   const fetchPedidos = useCallback(async () => {
-    if (!session) return;
-    const { data, error } = await supabase
-      .from("pedidos")
-      .select("*, productos(nombre)")
-      .order("created_at", { ascending: true });
+    const { data } = await supabase.from("pedidos").select("*, productos(nombre, categoria)");
+    setPedidos(data || []);
+  }, []);
 
-    if (!error) setPedidos(data as any || []);
-  }, [session]);
-
-  // --- Realtime ---
   useEffect(() => {
-    if (session) {
-      fetchPedidos();
-
-      channelRef.current = supabase
-        .channel("admin-realtime")
-        .on(
-          "postgres_changes", 
-          { event: "INSERT", schema: "public", table: "pedidos" }, 
-          () => {
-            fetchPedidos();
-            playBell();
-          }
-        )
-        .on(
-          "postgres_changes", 
-          { event: "UPDATE", schema: "public", table: "pedidos" }, 
-          () => {
-            fetchPedidos();
-          }
-        )
-        .on(
-          "postgres_changes", 
-          { event: "DELETE", schema: "public", table: "pedidos" }, 
-          () => {
-            fetchPedidos();
-          }
-        )
-        .subscribe();
-    }
-
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
+    if (session) fetchPedidos();
   }, [session, fetchPedidos]);
 
-  // --- Lógica de Estados ---
-  const avanzarEstado = async (p: Pedido) => {
-    let nuevoEstado = p.estado;
-    if (p.estado === "pendiente") nuevoEstado = "cocina";
-    else if (p.estado === "cocina") nuevoEstado = "entregado";
+  // --- LÓGICA DE AGRUPACIÓN ---
+  const mesasAgrupadas = useMemo(() => {
+    const grupos: Record<string, any> = {};
+    
+    pedidos.forEach(p => {
+      if (!grupos[p.mesa_id]) {
+        grupos[p.mesa_id] = { items: [], pide_cuenta: false, tiene_pendientes: false };
+      }
+      grupos[p.mesa_id].items.push(p);
+      if (p.pide_cuenta) grupos[p.mesa_id].pide_cuenta = true;
+      if (p.estado !== "entregado") grupos[p.mesa_id].tiene_pendientes = true;
+    });
 
-    const { error } = await supabase
-      .from("pedidos")
-      .update({ estado: nuevoEstado })
-      .eq("id", p.id);
-      
-    if (!error) fetchPedidos();
+    return Object.entries(grupos).sort(([a], [b]) => Number(a) - Number(b));
+  }, [pedidos]);
+
+  const actualizarEstadoMesa = async (mesa_id: string, nuevoEstado: string) => {
+    // Avanza todos los items de esa mesa al siguiente estado
+    await supabase.from("pedidos").update({ estado: nuevoEstado }).eq("mesa_id", mesa_id);
+    fetchPedidos();
   };
 
-  const finalizarServicio = async (mesa_id: string) => {
-    const { error } = await supabase
-      .from("pedidos")
-      .delete()
-      .eq("mesa_id", mesa_id);
-      
-    if (!error) fetchPedidos();
-  };
-
-  // --- Vistas Condicionales ---
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono text-xs uppercase tracking-widest">
-        Iniciando monitor...
-      </div>
-    );
-  }
-
-  if (!session) {
-    return <Login onLogin={() => {}} />; 
-  }
+  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Cargando SmartMenu...</div>;
+  if (!session) return <Login onLogin={fetchPedidos} />;
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6 text-white font-sans">
-      <header className="flex justify-between items-center mb-8 border-b border-white/10 pb-6">
+    <div className="min-h-screen bg-slate-950 p-4 md:p-8 text-white">
+      <header className="mb-10 flex justify-between items-center border-b border-white/5 pb-6">
         <div>
-          <h1 className="text-3xl font-black uppercase tracking-tighter text-orange-500">Monitor de Cocina</h1>
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold italic">Santa Fe - Control Panel</p>
+          <h1 className="text-3xl font-black text-orange-500 uppercase tracking-tighter">Panel de Servicio</h1>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Manejo de Mesas Agrupado</p>
         </div>
-        <button
-          onClick={() => supabase.auth.signOut()}
-          className="text-[10px] font-black uppercase bg-red-500/10 text-red-400 px-4 py-2 rounded-xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
-        >
-          Salir
-        </button>
       </header>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {pedidos.length === 0 ? (
-          <div className="col-span-full py-20 text-center bg-white/5 rounded-[2rem] border border-dashed border-white/10">
-            <p className="text-slate-500 uppercase text-xs font-bold tracking-widest">No hay pedidos en curso</p>
-          </div>
-        ) : (
-          pedidos.map((p) => (
-            <div
-              key={p.id}
-              className={`p-6 rounded-[2rem] border transition-all shadow-2xl flex flex-col justify-between ${
-                p.pide_cuenta 
-                  ? "bg-purple-900/40 border-purple-500 animate-pulse" 
-                  : "bg-slate-900/50 border-white/5"
-              }`}
-            >
-              <div>
-                <div className="flex justify-between items-start mb-4">
-                  <span className="text-4xl font-black italic">M{p.mesa_id}</span>
-                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${
-                    p.estado === 'pendiente' ? 'bg-amber-500 text-black' : 
-                    p.estado === 'cocina' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
-                  }`}>
-                    {p.estado}
-                  </span>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="text-orange-400 font-black text-xl uppercase leading-none mb-1">
-                    {p.productos?.nombre || "Cargando..."}
-                  </h3>
-                  <p className="text-slate-400 text-sm">Cantidad: <span className="text-white font-bold">{p.cantidad}</span></p>
-                  <p className="text-[10px] text-slate-500 mt-2 font-mono">{p.nombre_cliente}</p>
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {mesasAgrupadas.map(([mesaId, info]) => (
+          <div key={mesaId} className={`rounded-[2.5rem] border-2 transition-all p-6 flex flex-col justify-between ${
+            info.pide_cuenta ? "bg-purple-900/40 border-purple-500 animate-pulse" :
+            info.tiene_pendientes ? "bg-amber-500/5 border-amber-500/30" : "bg-emerald-500/5 border-emerald-500/30"
+          }`}>
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <span className="text-5xl font-black italic">M{mesaId}</span>
+                <div className="flex gap-2">
+                  <button className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">
+                    <Plus size={20} className="text-orange-400" />
+                  </button>
                 </div>
               </div>
 
-              {p.pide_cuenta ? (
-                <button
-                  onClick={() => finalizarServicio(p.mesa_id)}
-                  className="w-full py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-purple-500/20"
+              {/* Agrupación interna por categorías */}
+              <div className="space-y-4">
+                {["bebidas", "comidas", "postres"].map(cat => {
+                  const itemsCat = info.items.filter((i: any) => i.productos?.categoria?.toLowerCase() === cat);
+                  if (itemsCat.length === 0) return null;
+                  
+                  return (
+                    <div key={cat} className="bg-white/5 p-4 rounded-3xl">
+                      <p className="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest flex items-center gap-2">
+                        {cat === 'bebidas' && <Beer size={12}/>}
+                        {cat === 'comidas' && <Utensils size={12}/>}
+                        {cat}
+                      </p>
+                      {itemsCat.map((item: any) => (
+                        <div key={item.id} className="flex justify-between items-center mb-1">
+                          <span className={`font-bold ${item.estado === 'entregado' ? 'text-slate-600 line-through' : 'text-white'}`}>
+                            {item.cantidad}x {item.productos?.nombre}
+                          </span>
+                          <span className="text-[8px] uppercase font-bold text-slate-500">{item.estado}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-3">
+              {info.pide_cuenta ? (
+                <button 
+                  onClick={() => supabase.from("pedidos").delete().eq("mesa_id", mesaId).then(fetchPedidos)}
+                  className="w-full py-4 bg-purple-600 rounded-2xl font-black uppercase text-xs"
                 >
-                  ✅ Cobrado / Liberar Mesa
+                  ✅ Cobrar y Liberar Mesa
                 </button>
               ) : (
-                <button
-                  onClick={() => avanzarEstado(p)}
-                  disabled={p.estado === 'entregado'}
-                  className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
-                    p.estado === 'entregado' 
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
-                      : 'bg-white text-black hover:bg-orange-500 hover:text-white'
-                  }`}
-                >
-                  {p.estado === "pendiente" ? "Empezar Cocina 👨‍🍳" : 
-                   p.estado === "cocina" ? "Entregar a Mesa 🏃‍♂️" : "Pedido en Mesa 🍽️"}
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => actualizarEstadoMesa(mesaId, "cocina")}
+                    className="py-3 bg-amber-500 text-black rounded-xl font-black text-[10px] uppercase"
+                  >
+                    Todo a Cocina
+                  </button>
+                  <button 
+                    onClick={() => actualizarEstadoMesa(mesaId, "entregado")}
+                    className="py-3 bg-white text-black rounded-xl font-black text-[10px] uppercase"
+                  >
+                    Todo Entregado
+                  </button>
+                </div>
               )}
             </div>
-          ))
-        )}
+          </div>
+        ))}
       </div>
     </div>
   );
