@@ -11,6 +11,7 @@ interface Pedido {
   estado: "pendiente" | "cocina" | "listo";
   nombre_cliente: string;
   created_at: string;
+  pide_cuenta: boolean; // Nueva columna integrada
   productos?: {
     nombre: string;
   };
@@ -47,7 +48,7 @@ export default function AdminPanel() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Fetch inicial ──────────────────────────────────────────────────────────
+  // ── Fetch inicial (Incluyendo pide_cuenta) ──────────────────────────────────
   const fetchPedidosInicial = useCallback(async () => {
     const { data, error } = await supabase
       .from("pedidos")
@@ -63,9 +64,8 @@ export default function AdminPanel() {
     if (!error) setPedidos(data as unknown as Pedido[] ?? []);
   }, []);
 
-  // ── Handlers Realtime con Sonido ────────────────────────────────────────────
+  // ── Handlers Realtime ───────────────────────────────────────────────────────
   const handleInsert = useCallback(async (nuevoPedido: Pedido) => {
-    // 🔔 ¡SUENA LA CAMPANA! 
     playBell();
 
     const { data: prodData } = await supabase
@@ -159,7 +159,7 @@ export default function AdminPanel() {
           <h1 className="text-3xl font-black uppercase tracking-tighter text-orange-500">
             Cocina Smart 🍳
           </h1>
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Panel de Control en Vivo</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Gestión de Comandas</p>
         </div>
         <button
           onClick={handleLogout}
@@ -171,39 +171,54 @@ export default function AdminPanel() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {pedidos.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10">
+          <div className="col-span-full flex flex-col items-center justify-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10 text-center px-4">
             <span className="text-4xl mb-4">💤</span>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Sin pedidos pendientes</p>
+            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Esperando pedidos...</p>
           </div>
         ) : (
           pedidos.map((p) => (
             <div
               key={p.id}
-              className="p-6 bg-slate-900/50 border border-white/5 rounded-[2rem] shadow-2xl backdrop-blur-sm"
+              className={`p-6 rounded-[2rem] border transition-all shadow-2xl backdrop-blur-sm flex flex-col justify-between h-full ${
+                p.pide_cuenta 
+                  ? "bg-purple-900/40 border-purple-500 shadow-purple-500/20 animate-pulse" 
+                  : "bg-slate-900/50 border-white/5"
+              }`}
             >
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-4xl font-black text-white">#{p.mesa_id}</span>
-                <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${
-                  p.estado === 'pendiente' ? 'bg-amber-500 text-black' : 'bg-blue-500 text-white'
-                }`}>
-                  {p.estado}
-                </span>
-              </div>
+              <div>
+                {/* Banner de ALERTA si pide la cuenta */}
+                {p.pide_cuenta && (
+                  <div className="bg-purple-500 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase mb-4 text-center tracking-widest">
+                    🚨 ¡SOLICITA LA CUENTA!
+                  </div>
+                )}
 
-              <div className="mb-6">
-                <h3 className="text-orange-400 font-black text-xl uppercase leading-none mb-1">
-                  {p.productos?.nombre || "Cargando..."}
-                </h3>
-                <p className="text-slate-400 text-sm font-medium">
-                  Cantidad: <span className="text-white font-black text-lg">{p.cantidad}</span>
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 mb-6 p-3 bg-white/5 rounded-2xl">
-                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-xs font-black text-black">
-                  {p.nombre_cliente.charAt(0).toUpperCase()}
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-4xl font-black text-white">#{p.mesa_id}</span>
+                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${
+                    p.estado === 'pendiente' ? 'bg-amber-500 text-black' : 'bg-blue-500 text-white'
+                  }`}>
+                    {p.estado}
+                  </span>
                 </div>
-                <span className="text-xs font-bold text-slate-300 uppercase tracking-tight">{p.nombre_cliente}</span>
+
+                <div className="mb-6">
+                  <h3 className="text-orange-400 font-black text-xl uppercase leading-none mb-1">
+                    {p.productos?.nombre || "Cargando..."}
+                  </h3>
+                  <p className="text-slate-400 text-sm font-medium">
+                    Cantidad: <span className="text-white font-black text-lg">{p.cantidad}</span>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 mb-6 p-3 bg-white/5 rounded-2xl">
+                  <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-xs font-black text-black uppercase">
+                    {p.nombre_cliente?.charAt(0) || "?"}
+                  </div>
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-tight truncate">
+                    {p.nombre_cliente}
+                  </span>
+                </div>
               </div>
 
               <button
